@@ -17,7 +17,8 @@ import copy
 
 import fill
 
-call(["python3","setup.py","build_ext","--inplace"])
+#call(["python3","setup.py","build_ext","--inplace"])
+print('WARNING: no attempt made to update the cython code. IF YOU WANT TO RELOAD: uncomment above line (line #20), run, then restart python to update.')
 
 # TODO: check to make sure python isn't less up-to-date.
 
@@ -27,7 +28,8 @@ import life # AFTER the call.
 
 # makes a problem (that the climber has to solve):
 def makeProblem(**kwargs):
-    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02, 'time': 10000, 'rng': 3210123}
+    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02, 
+                'time': 10000, 'rng': RandomState(3210123)}
     return fill.fill(kwargs, defaults)
 
 def copyRng(rng):
@@ -36,9 +38,15 @@ def copyRng(rng):
     rs.set_state(rng.get_state()) # doesn't depend on seeds, works even with different seeds.
     return rs
 
+def newRng(seed):
+    return RandomState(seed)
+
 def nextSeed(rng):
     rng = copyRng(rng)
     return rng.randint(0,2147483647)
+
+def nextSeedFromCurrentSeed(seed):
+    return nextSeed(RandomState(seed))
 
 def nextRng(rng): # generates a new RNG by making a random seed from the current rng.
     # Don't generate a new rng every random number. Instead, batch random #'s.
@@ -76,11 +84,12 @@ def addDebris(pattern, w, h, worldW, density, rng):
     nNeed = 0.25*(worldW-w)*h*density # how many we need.
     nHave = 0
     pattern0 = np.zeros((worldW,h),np.int)
+    #print("w",w,"h",h,"sz",pattern.shape,'sz0',pattern0.shape)
     pattern0[0:w, 0:h] = pattern
     while nHave < nNeed:
        # pick a random point.
-       rx = rng.nextInt(w,worldW-2) # indexes are inclusive.
-       ry = rng.nextInt(0,h-1)
+       rx = rng.randint(w,worldW-2) # indexes are inclusive.
+       ry = rng.randint(0,h-1)
 
        #print(self.isclear(pattern0,rx,ry,2,2))
        if isclear(pattern0,rx,ry,2,2)==True:
@@ -116,9 +125,7 @@ def mostRightward(pattern0, pattern1, w, h, worldW):
 def singleTrial(pattern, problem):
     # Generates pattern, returns the fitness.
     pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], problem['rng'])
-
     pattern1 = conway(pattern0, problem['time'], problem['chunk'])
-
     return mostRightward(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])
 
 def getMultiTrialRngs(rng, n):
@@ -131,13 +138,22 @@ def getMultiTrialRngs(rng, n):
         rngs.append(r)
     return rngs
 
-def fitness(problem, pattern, n, pool): # Runs n trials, parallelization is optional (disabled if pool = None).
+def fitness(problem, pattern, n): # Runs n trials.
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
     
-    if pool is not None: # multithread.
-        fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), pmap.box(problem), rngs))
+    # Put one rng into each problem:
+    problems = list()
+    for i in range(n):
+        problem1 = copy.copy(problem)
+        problem1['rng'] = rngs[i]
+        problems.append(problem1)
+    
+    parallel = True
+    
+    if parallel: # multithread.
+        fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
     else:
-        fitnesses = list(map(lambda r: singleTrial(pattern, problem, r), rngs))
+        fitnesses = list(map(lambda p: singleTrial(pattern, p), problems))
     return functools.reduce(lambda x, y: x + y, fitnesses) / n
 
 def showPattern(pattern): # shows a pattern (only works for a figure).
@@ -168,10 +184,12 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
         ax.set_title('Trial # '+str(i)+' fitness: '+str(sc))
     plt.show()
 
-def run(problem, pop, solution, pool, nStep):
-    "The main run function. Solution is an fn that takes in (problem, pop, pool) => pop"
+def run(problem, hyperGeno, genos, nextGenosFn, nStep):
+    """The main run function.
+        nextGenosFn is (hyperGeno, genos, problem) => genos."""
+    
     problem = copy.copy(problem)
-    for i in range(nstep):
-        pop = solution(problem, pop, pool)
-        problem['rng'] = nextRng(problem['rng']) # So the climber can't get used to our problem.
-    return pop
+    for i in range(nStep):
+        genos = nextGenosFn(hyperGeno, genos, problem)
+        problem['rng'] = nextRng(problem['rng']) # Important part.
+    return genos
