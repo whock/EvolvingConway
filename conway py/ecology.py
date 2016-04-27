@@ -26,9 +26,29 @@ import life # AFTER the call.
 #life = reload(life) # reload it because we built it BUT the software will have to be ran twice!
 
 
+class Sentinel():
+    '''creates a callable object which can be called within any fx to store data
+    pass the sentinel a list of arguments where the 1st is
+    -- 'data'
+    -- 'metadata'
+    -- 'pattern'
+    and the rest of the arguments are the data to be stored
+    example use: sniff('data',[109,111,110,123])
+    '''
+    def __init__(self):
+        self.data = {'data' = [],'metadata' = [], 'patterns' = []}
+    def __call__(self,*args):
+        if type(args[1]) == dict:
+            new_args = [(k,args[1][k]) for i,k in enumerate(args[1])]
+            args = [args[0],new_args]
+        self.data[args[0]] = [args[1:]]
+
+sentinel = Sentinel()
+
+
 # makes a problem (that the climber has to solve):
 def makeProblem(**kwargs):
-    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02, 
+    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02,
                 'time': 10000, 'rng': RandomState(3210123)}
     return fill.fill(kwargs, defaults)
 
@@ -140,16 +160,16 @@ def getMultiTrialRngs(rng, n):
 
 def fitness(problem, pattern, n): # Runs n trials.
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
-    
+
     # Put one rng into each problem:
     problems = list()
     for i in range(n):
         problem1 = copy.copy(problem)
         problem1['rng'] = rngs[i]
         problems.append(problem1)
-    
+
     parallel = True
-    
+
     if parallel: # multithread.
         fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
     else:
@@ -159,11 +179,11 @@ def fitness(problem, pattern, n): # Runs n trials.
 def showPattern(pattern): # shows a pattern (only works for a figure).
     plt.imshow(pattern)
     plt.show()
-    
+
 def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going on.
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
     f, axs = plt.subplots(n)
-    
+
     for i in range(n):
         pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], rngs[i])
         pattern1 = run(pattern0, problem['time'], problem['chunk'])
@@ -179,15 +199,20 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
                 for j in range(skip):
                     land.step()
             acc = np.add(acc, land.getPattern())
-            ax.imshow(acc)  
-        sc = score(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])  
+            ax.imshow(acc)
+        sc = score(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])
         ax.set_title('Trial # '+str(i)+' fitness: '+str(sc))
     plt.show()
+
+def add_to_database():
+    pass
+
+def gather_data()
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.
         nextGenosFn is (hyperGeno, genos, problem) => genos."""
-    
+
     problem = copy.copy(problem)
     for i in range(nStep):
         genos = nextGenosFn(hyperGeno, genos, problem)
