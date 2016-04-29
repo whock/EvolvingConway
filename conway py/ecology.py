@@ -14,6 +14,7 @@ from numpy.random import RandomState
 import pmap
 from subprocess import call#, reload
 import copy
+from conway_sql import *
 
 import fill
 
@@ -41,7 +42,7 @@ class Sentinel():
     def __call__(self,*args):
         self.counter += 1
         for item in args:
-            self.data[item[0]] = (self.counter,item[1])
+            self.data[item[0]].append((self.counter,item[1]))
 
 sentinel = Sentinel()
 
@@ -206,9 +207,6 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
         ax.set_title('Trial # '+str(i)+' fitness: '+str(sc))
     plt.show()
 
-def add_to_database():
-    pass
-
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.
@@ -218,4 +216,5 @@ def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     for i in range(nStep):
         genos = nextGenosFn(hyperGeno, genos, problem)
         problem['rng'] = nextRng(problem['rng']) # Important part.
+    save_sentinel(sentinel)
     return genos
