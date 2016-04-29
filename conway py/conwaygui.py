@@ -124,11 +124,7 @@ def takeOneFromPlotQ(): # only called on the update thread:
             ax.imshow(np.transpose(val))
         elif name == 'title':
             ax.set_title(val)
-    #print("Almost Done with plotting")
-    #plt.imshow() # "GTKAgg"
-    #plt.show()
     emFig.canvas.draw()
-    #print("Done with plotting")
 
 def doGuiCmd(cmd): # work-around for other things not being able to import ourselves. 
     # can be called from any thread.
@@ -136,18 +132,17 @@ def doGuiCmd(cmd): # work-around for other things not being able to import ourse
     name = list(cmd.keys())[0]
     method = getattr(thismodule,name)
     method(*cmd[name]) # call it.
-    #return {'multiImagePlot': [imgs, titles]}  
 
 ##################### Testing functions #####################
 
 def testPause():
     import time
     pr("Immediate")
-    time.sleep(1)
+    time.sleep(2)
     pr("After 1 second")
-    time.sleep(1)
+    time.sleep(2)
     pr("After 2 second")
-    time.sleep(1)
+    time.sleep(2)
     pr("And after 3 seconds (done)")
 
 
@@ -155,14 +150,6 @@ def testPause():
 
 def clc(): # Octave-style clear command line.
     wantsClcQ.put(1)
-
-#def clear(*args): # Octave-style clear.
-#    print("clear: ")
-#    if len(args)==0:
-#        workspace.clear()
-#    else:
-#        for a in args:
-#            workspace.pop(a, "Some default so that there is no error when clearing a non-existant var.") 
 
 def prQempty(): # must be called from the main thread due to tkinter bieng picky.
     #print('size: ',printQ.qsize())
@@ -177,7 +164,6 @@ def cmdBoxKeyPress(event):
     global commandsEnteredIndex
     char = event.char
     nCommand = len(commandsEntered)
-    #print("pressed", s, event.char == '\uf700',s == '\uf701', nCommand);
     if char == '\uf700' and commandsEnteredIndex > 0: # up arrow, earlier commands.
         commandsEnteredIndex = commandsEnteredIndex-1
     elif char== '\uf701' and commandsEnteredIndex < nCommand-1: # up arrow, earlier commands.
