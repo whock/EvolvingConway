@@ -8,9 +8,12 @@ def testFitness():
     geno = hillClimb.initGenotypes(hyper)
     problem = ecology.makeProblem()
     (pattern, _) = hillClimb.phenotype(geno, problem)
-    n = 16
+    n = 4
     score = ecology.fitness(problem, pattern, n)
-    return score
+    mode = 'init-fin'
+    # mode = 'cloudy-timelapse'
+    vt = ecology.viewTrial(problem, pattern, n, mode) # this part takes a few seconds.
+    return {'result': score, 'gui': vt}
 
 #def hillClimbFromBadStart():
 #    # Runs the hillclimber from a bad start, making it easier to show improvement.

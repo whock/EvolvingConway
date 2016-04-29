@@ -15,6 +15,8 @@ import pmap
 from subprocess import call#, reload
 import copy
 
+#import conwaygui
+
 import fill
 
 #call(["python3","setup.py","build_ext","--inplace"])
@@ -139,6 +141,7 @@ def getMultiTrialRngs(rng, n):
     return rngs
 
 def fitness(problem, pattern, n): # Runs n trials.
+    
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
     
     # Put one rng into each problem:
@@ -147,9 +150,7 @@ def fitness(problem, pattern, n): # Runs n trials.
         problem1 = copy.copy(problem)
         problem1['rng'] = rngs[i]
         problems.append(problem1)
-    
     parallel = True
-    
     if parallel: # multithread.
         fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
     else:
@@ -162,14 +163,13 @@ def showPattern(pattern): # shows a pattern (only works for a figure).
     
 def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going on.
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
-    f, axs = plt.subplots(n)
-    
+    imgs = []
+    titles = []
     for i in range(n):
         pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], rngs[i])
-        pattern1 = run(pattern0, problem['time'], problem['chunk'])
-        ax = axs[i]
+        pattern1 = conway(pattern0, problem['time'], problem['chunk'])
         if mode=='init-fin':
-            ax.imshow(np.add( np.multiply(pattern1,10), pattern0))
+            imgs.append(np.add( np.multiply(pattern1,10), pattern0))
         if mode=='cloudy-timelapse': # run again, in slow mo!
             land = life.Life()
             land.setPatternAndChunk(pattern0,problem['chunk'])
@@ -179,10 +179,10 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
                 for j in range(skip):
                     land.step()
             acc = np.add(acc, land.getPattern())
-            ax.imshow(acc)  
-        sc = score(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])  
-        ax.set_title('Trial # '+str(i)+' fitness: '+str(sc))
-    plt.show()
+            imgs.append(acc)  
+        sc = mostRightward(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])  
+        titles.append('Trial # '+str(i)+' fitness: '+str(sc))
+    return {'multiImagePlot': [imgs, titles]} # can't import conway directly, it crashes.
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.

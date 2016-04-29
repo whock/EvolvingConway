@@ -20,10 +20,17 @@ def unboxIfBoxed(x):
     else:
         return x
 
-def applyFn(fnAndArgArray): # Splats the argument array.
-    #print("Taking a RUN.")
-    fn = fnAndArgArray[0] # the fn is first.
-    argArray = fnAndArgArray[1:]
+def applyFn(fnAndArgArray): # Splats the argument array, returns an error msg because it's in a try-catch..
+    try:
+        #print("Taking a RUN.")
+        fn = fnAndArgArray[0] # the fn is first.
+        argArray = fnAndArgArray[1:]
+        return fn(*argArray)
+    except:
+        #print("Error arrrorererere.")
+        ex_type, ex, tb = sys.exc_info()
+        #print("Error in the function used for pool.map()")
+        return {"type": ex_type, "eceptionx": ex, "trace": tb}
     return fn(*argArray)
 
 def dumbTestMap(x):
@@ -68,3 +75,6 @@ def maplist(fn, *fnargs):
     #return pool.map(dumbTestMap, range(10))
     #print("DONE")
     return list(pool.map(applyFn, argsEachIter))
+
+def shutdown():
+    pool.shutdown()

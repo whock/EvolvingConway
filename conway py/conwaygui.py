@@ -19,9 +19,9 @@ import string
 import taskMgr
 import matplotlib
 import importlib
-#import matplotlib.pyplot as plt
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from tkinter import *
 from importlib import * # allows the user to call reload(...) to realod a module. 
@@ -31,6 +31,9 @@ import re
 import pickle
 import io
 import threading
+import math
+import itertools
+import pmap
 
 ##################### Program state #####################
 
@@ -42,13 +45,16 @@ printQ = multiprocessing.Queue() # DO NOT USE queue.Queue(). It will hate you.
 workspaceQ = multiprocessing.Queue() # variables are stored here, all in a single data structure.
 importsQ = multiprocessing.Queue() # imports are stored here.
 wantsClcQ = multiprocessing.Queue()
+plotQ = multiprocessing.Queue()
 commandsEntered = [] # all commands the user inputed.
 commandsEnteredIndex = 0
 
-##################### Setting up the UI #####################
+##################### UI related variables and functions #####################
 root = Tk()
-emFig = Figure(figsize=(5, 4), dpi=150)
-plotter = emFig.add_subplot(111) # use this to plot stuff.
+emFig = Figure(figsize=(8, 5), dpi=100)
+#plt.show(emFig)
+#emFig.number = 1
+#plotter =None# emFig.add_subplot(111) # use this to plot stuff.
 
 c = FigureCanvasTkAgg(emFig, master=root)
 c.show()
@@ -72,6 +78,65 @@ def pr(*args): # like the original print, but to the outputbox using a queue.
     #print('size  : ',printQ.qsize())
     #outputBox.insert(END, '\n')
     #outputBox.insert(END, s)
+
+def multiImagePlot(imgs, titles): # can be called from any thread.
+    # TODO: put these into ecology?
+    n = len(imgs)
+    cmds = []
+    cmds.append({'clear': None})
+    cmds.append({'makeSubplot': n})
+    for i in range(n):
+        cmds.append({'subaxis': i})
+        cmds.append({'image': imgs[i]})
+        cmds.append({'title': titles[i]})
+    #print("Put to plotQ")
+    plotQ.put(cmds)
+
+def takeOneFromPlotQ(): # only called on the update thread:
+    subF = None
+    gridSpec = None
+    gridSpecSize = None
+    ax = None 
+    if plotQ.empty():
+        return
+    #print("Get from plotQ")
+    #plt.figure()
+    cmds = plotQ.get()
+    for cmd in cmds:
+        name = list(cmd.keys())[0]
+        val = cmd[name]
+        #print("Running plot cmd:",name)
+        if name == 'clear':
+            plt.clf()
+        elif name == 'makeSubplot':
+            sizes = [[1,[1,1]], [2,[1,2]], [3,[1,3]], [4,[2,2]], [6,[2,3]], [9,[3,3]],
+                     [12, [3,4]], [16, [4,4]], [20, [4,5]], [25, [5,5]], [36, [6,6]]]
+            sz = [math.ceil(math.sqrt(val)), math.ceil(math.sqrt(val))]
+            ls = list(itertools.dropwhile(lambda s: s[0]<val, sizes))
+            if ls:
+               sz = ls[0]
+            gridSpecSize = [sz[1][0], sz[1][1]]
+            gridSpec = plt.GridSpec(gridSpecSize[0],gridSpecSize[1])
+        elif name == 'subaxis':
+            #print("axpos:",val % gridSpecSize[0] , math.floor(val/gridSpecSize[0] + 1e-12))
+            ax = emFig.add_subplot(gridSpec[val % gridSpecSize[0] , math.floor(val/gridSpecSize[0] + 1e-12)])
+        elif name == 'image':
+            ax.imshow(np.transpose(val))
+        elif name == 'title':
+            ax.set_title(val)
+    #print("Almost Done with plotting")
+    #plt.imshow() # "GTKAgg"
+    #plt.show()
+    emFig.canvas.draw()
+    #print("Done with plotting")
+
+def doGuiCmd(cmd): # work-around for other things not being able to import ourselves. 
+    # can be called from any thread.
+    thismodule = sys.modules[__name__]
+    name = list(cmd.keys())[0]
+    method = getattr(thismodule,name)
+    method(*cmd[name]) # call it.
+    #return {'multiImagePlot': [imgs, titles]}  
 
 ##################### Testing functions #####################
 
@@ -162,44 +227,45 @@ def convertImport(s):
         return asName + " = importlib.reload( importlib.import_module('"+ modName +"'))"
     
 
-def evalTweak(s, workspace, imports): # evals s but puts variables in workspace, etc.
-    # TODO: we can't pickle modules, so instead keep a list of import commands and run them each time.
-    if (re.match('\ *import ', s) is not None) or (re.match('\ *from ', s) is not None): # Imports or from statements.
-        try: # make sure it can be ran b4 adding it to the queue.
-            s = convertImport(s) # conversion to always reload (defensive).
-            exec(s) 
-            imports.append(s)
-        except:
-            prError()
-    else:
-        # Make every value in workspace accessable:
-        #print(workspace)
-        for key in workspace:
-            #print("Exec:",key+'= workspace["'+key+'"]')
-            exec(key+'= workspace["'+key+'"]') # workspace variables shadow other vars with the same name, as in Octave.
-        
-        # Run the imports:
-        for imp in imports:
-            try:
-                #print("Exec:",imp, " ON ", threading.current_thread())
-                exec(imp)
+def evalsTweak(statements, workspace, imports): # evals each s in statements and puts variables in workspace, etc.
+    # We can't pickle modules, so instead keep a list of import commands and run them each time.
+    for s in statements:
+        if (re.match('\ *import ', s) is not None) or (re.match('\ *from ', s) is not None): # Imports or from statements.
+            try: # make sure it can be ran b4 adding it to the queue.
+                s = convertImport(s) # conversion to always reload (defensive).
+                exec(s) 
+                imports.append(s)
             except:
                 prError()
-        try:
-            #print("Exec:",s, " ON ", threading.current_thread())
-            exec(s) # The command itself (note the exec, not the eval). At this point all the variable scopes should be correct.
-        except:
-            prError()
-        locVarsAfterExec = locals()
-        
-        fakeFile = io.BytesIO()
-        for key in locVarsAfterExec: # Put the variables back into work-space.
-            try: # how to check for pickling. There isn't a isPicklable function unfortanatly.
-                obj = locVarsAfterExec[key]
-                pickle.dump(obj, fakeFile)
-                workspace[key] = obj
-            except pickle.PicklingError:
-                pass
+        else:
+            # Make every value in workspace accessable:
+            #print(workspace)
+            for key in workspace:
+                #print("Exec:",key+'= workspace["'+key+'"]')
+                exec(key+'= workspace["'+key+'"]') # workspace variables shadow other vars with the same name, as in Octave.
+            
+            # Run the imports:
+            for imp in imports:
+                try:
+                    #print("Exec:",imp, " ON ", threading.current_thread())
+                    exec(imp)
+                except:
+                    prError()
+            try:
+                #print("Exec:",s, " ON ", threading.current_thread())
+                exec(s) # The command itself (note the exec, not the eval). At this point all the variable scopes should be correct.
+            except:
+                prError()
+            locVarsAfterExec = locals()
+            
+            fakeFile = io.BytesIO()
+            for key in locVarsAfterExec: # Put the variables back into work-space.
+                try: # how to check for pickling. There isn't a isPicklable function unfortanatly.
+                    obj = locVarsAfterExec[key]
+                    pickle.dump(obj, fakeFile)
+                    workspace[key] = obj
+                except pickle.PicklingError:
+                    pass
     #print("----------------------------")
     return [workspace, imports]
     
@@ -212,11 +278,15 @@ def everyFrame():
     while not wantsClcQ.empty():
         wantsClcQ.get()
         outputBox.delete(1.0, 'end')
+    try:
+        takeOneFromPlotQ()
+    except:
+        prError()
     root.after(25, everyFrame) # everyFrame is an infinite loop without blocking.
 
-def execCmd(s):
+def execCmds(s):
     (workspace, imports) = getFromQueue()
-    (workspace, imports) = evalTweak(s, workspace, imports)
+    (workspace, imports) = evalsTweak(s, workspace, imports)
     putInQueue(workspace, imports)
 
 def runCmd(_): # ALL commands pass through here.
@@ -227,7 +297,7 @@ def runCmd(_): # ALL commands pass through here.
     if cmdText[-1]=='\uf700' or cmdText[-1]=='\uf701':
        cmdText = cmdText[0:-1] # remove the last char.
     commandsEntered.append(cmdText)
-    taskMgr.future(execCmd, cmdText) 
+    taskMgr.future(execCmds, [cmdText]) # the cmd is treated as a single statement.
     cmdBox.delete(0, 'end')
     commandsEnteredIndex = len(commandsEntered)
 
@@ -236,6 +306,19 @@ everyFrame() # initialize the loop.
 ##################### Activating the main loop #####################
 cmdBox.bind('<Return>', runCmd)
 cmdBox.bind("<Key>", cmdBoxKeyPress)
+
+# non-blocking startup script:
+try: # catch errors with the startscript.cmds() function
+    import startscript
+    startups = startscript.cmds()
+    if len(startups)>0:
+        pr("starting up")
+    startups.append('pr("Startup complete")')
+    taskMgr.future(execCmds, startups)
+except:
+    ex_type, ex, tb = sys.exc_info()
+    pr("Error with loading the startscript cmds: ",ex_type,ex)
+   
 while True:
     try:
         root.mainloop()
@@ -243,7 +326,9 @@ while True:
     except UnicodeDecodeError:
         pass
 
-
+print("shutting down")
+pmap.shutdown()
+print("done shutting down")
 
 
 
