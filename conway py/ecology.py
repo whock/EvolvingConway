@@ -28,7 +28,7 @@ import life # AFTER the call.
 
 class Sentinel():
     '''creates a callable object which can be called within any fx to store data
-    pass the sentinel a list of arguments where the 1st is
+    pass the sentinel a tuple of tuples ('name',value) where value is an iterable
     -- 'data'
     -- 'metadata'
     -- 'pattern'
@@ -37,11 +37,11 @@ class Sentinel():
     '''
     def __init__(self):
         self.data = {'data' = [],'metadata' = [], 'patterns' = []}
+        self.counter = 0
     def __call__(self,*args):
-        if type(args[1]) == dict:
-            new_args = [(k,args[1][k]) for i,k in enumerate(args[1])]
-            args = [args[0],new_args]
-        self.data[args[0]] = [args[1:]]
+        self.counter += 1
+        for item in args:
+            self.data[item[0]] = (self.counter,item[1])
 
 sentinel = Sentinel()
 
@@ -174,7 +174,9 @@ def fitness(problem, pattern, n): # Runs n trials.
         fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
     else:
         fitnesses = list(map(lambda p: singleTrial(pattern, p), problems))
-    return functools.reduce(lambda x, y: x + y, fitnesses) / n
+    return_this = functools.reduce(lambda x, y: x + y, fitnesses) / n
+    sentinel(('data',return_this),('pattern',pattern),('problem',problem))
+    return return_this
 
 def showPattern(pattern): # shows a pattern (only works for a figure).
     plt.imshow(pattern)
@@ -207,7 +209,6 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
 def add_to_database():
     pass
 
-def gather_data()
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.
