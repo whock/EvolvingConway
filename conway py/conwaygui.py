@@ -137,7 +137,7 @@ def doGuiCmd(cmd): # work-around for other things not being able to import ourse
 
 def testPause():
     import time
-    pr("Test pause. Immediate.")
+    pr("Test pause. Immediate (after zero seconds).")
     time.sleep(2)
     pr("After 1 second")
     time.sleep(2)
