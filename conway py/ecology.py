@@ -14,6 +14,7 @@ from numpy.random import RandomState
 import pmap
 from subprocess import call#, reload
 import copy
+from conway_sql import *
 
 #import conwaygui
 
@@ -28,9 +29,29 @@ import life # AFTER the call.
 #life = reload(life) # reload it because we built it BUT the software will have to be ran twice!
 
 
+class Sentinel():
+    '''creates a callable object which can be called within any fx to store data
+    pass the sentinel a tuple of tuples ('name',value) where value is an iterable
+    -- 'data'
+    -- 'metadata'
+    -- 'pattern'
+    and the rest of the arguments are the data to be stored
+    example use: sniff('data',[109,111,110,123])
+    '''
+    def __init__(self):
+        self.data = {'data' = [],'metadata' = [], 'patterns' = []}
+        self.counter = 0
+    def __call__(self,*args):
+        self.counter += 1
+        for item in args:
+            self.data[item[0]].append((self.counter,item[1]))
+
+sentinel = Sentinel()
+
+
 # makes a problem (that the climber has to solve):
 def makeProblem(**kwargs):
-    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02, 
+    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02,
                 'time': 10000, 'rng': RandomState(3210123)}
     return fill.fill(kwargs, defaults)
 
@@ -143,7 +164,7 @@ def getMultiTrialRngs(rng, n):
 def fitness(problem, pattern, n): # Runs n trials.
     
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
-    
+
     # Put one rng into each problem:
     problems = list()
     for i in range(n):
@@ -155,16 +176,20 @@ def fitness(problem, pattern, n): # Runs n trials.
         fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
     else:
         fitnesses = list(map(lambda p: singleTrial(pattern, p), problems))
-    return functools.reduce(lambda x, y: x + y, fitnesses) / n
+    return_this = functools.reduce(lambda x, y: x + y, fitnesses) / n
+    sentinel(('data',return_this),('pattern',pattern),('problem',problem))
+    return return_this
 
 def showPattern(pattern): # shows a pattern (only works for a figure).
     plt.imshow(pattern)
     plt.show()
-    
+
 def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going on.
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
     imgs = []
     titles = []
+    f, axs = plt.subplots(n)
+
     for i in range(n):
         pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], rngs[i])
         pattern1 = conway(pattern0, problem['time'], problem['chunk'])
@@ -184,12 +209,14 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
         titles.append('Trial # '+str(i)+' fitness: '+str(sc))
     return {'multiImagePlot': [imgs, titles]} # can't import conway directly, it crashes.
 
+
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.
         nextGenosFn is (hyperGeno, genos, problem) => genos."""
-    
+
     problem = copy.copy(problem)
     for i in range(nStep):
         genos = nextGenosFn(hyperGeno, genos, problem)
         problem['rng'] = nextRng(problem['rng']) # Important part.
+    save_sentinel(sentinel)
     return genos
