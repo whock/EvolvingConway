@@ -39,7 +39,7 @@ class Sentinel():
     example use: sniff('data',[109,111,110,123])
     '''
     def __init__(self):
-        self.data = {'data' = [],'metadata' = [], 'patterns' = []}
+        self.data = {'data': [],'metadata': [], 'patterns': [], 'problems': []}
         self.counter = 0
     def __call__(self,*args):
         self.counter += 1
@@ -177,7 +177,7 @@ def fitness(problem, pattern, n): # Runs n trials.
     else:
         fitnesses = list(map(lambda p: singleTrial(pattern, p), problems))
     return_this = functools.reduce(lambda x, y: x + y, fitnesses) / n
-    sentinel(('data',return_this),('pattern',pattern),('problem',problem))
+    sentinel(('data',return_this),('patterns',pattern),('problems',problem))
     return return_this
 
 def showPattern(pattern): # shows a pattern (only works for a figure).
@@ -185,10 +185,10 @@ def showPattern(pattern): # shows a pattern (only works for a figure).
     plt.show()
 
 def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going on.
+    
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
     imgs = []
     titles = []
-    f, axs = plt.subplots(n)
 
     for i in range(n):
         pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], rngs[i])
@@ -207,13 +207,13 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
             imgs.append(acc)  
         sc = mostRightward(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])  
         titles.append('Trial # '+str(i)+' fitness: '+str(sc))
+    
     return {'multiImagePlot': [imgs, titles]} # can't import conway directly, it crashes.
 
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
     """The main run function.
         nextGenosFn is (hyperGeno, genos, problem) => genos."""
-
     problem = copy.copy(problem)
     for i in range(nStep):
         genos = nextGenosFn(hyperGeno, genos, problem)
