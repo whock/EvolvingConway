@@ -11,13 +11,13 @@ import numpy as np
 
 def hyperGenotype(**kwargs): #### KEY FUNCTION.
     """ Creates a set of hyper parameters that is used for evolving but does not change as evolution progresses. """
-    defaults = {'initDensity': 0.5, 'replicates': 12, 'mutateRate': 0.07, 'reuseFitness': False, 'moment':float("inf"), 'seed': 12345}
+    defaults = {'initDensity': 0.5, 'replicates': 12, 'mutateRate': 0.07, 'reuseFitness': False, 'moment':float("inf"), 'seed': [1,2,3,4,5,6,7,8]}
     return fill.fill(kwargs, defaults)
   
 def singleGenotype(hyperGenotype):
     # NOTE: rngs need to be in the genotype to stay fresh and change each generation
     # However, they are not optimized on. Same idea with fitness.
-    return {'pattern': np.zeros([0,0], np.int), 'rng': ecology.newRng(hyperGenotype['seed']),
+    return {'pattern': np.zeros([0,0], np.int), 'seed': ecology.nextSeed(hyperGenotype['seed'],"hillClimb.singleGenotype, Setting the single genotype form the hyper genotype."),
               'fitness': None, 'fillDensity': hyperGenotype['initDensity']}
     
 def initGenotypes(hyperGenotype): #### KEY FUNCTION. 
@@ -27,17 +27,20 @@ def initGenotypes(hyperGenotype): #### KEY FUNCTION.
 def nextGenotypes(hyperGeno, genos, problem): #### KEY FUNCTION.
     """ Computes the next set of genotypes from the hyper params, the current genotype, and the problem."""
     geno = genos # only one genotype.
-    geno['rng'] = ecology.copyRng(geno['rng'])
+    geno = geno.copy() # don't modify the original.
+    
     w = problem['w']
     h = problem['h']
     
     if hyperGeno['reuseFitness'] and geno['fitness'] is not None:
         oldScore = geno['fitness']
     else:
-        (oldPattern, geno['rng']) = genetics.oneToOne(geno, problem)
+        geno['seed'] = ecology.nextSeed(geno['seed'], "hillClimb.nextGenotypes, Change the seed for the gene expression step.")
+        oldPattern = genetics.oneToOne(geno, problem)
         oldScore = ecology.fitness(problem, oldPattern, hyperGeno['replicates'])
         geno['fitness'] = oldScore
-    (newPattern, geno['rng']) = genetics.pointwiseMutate(oldPattern, geno['rng'], hyperGeno['mutateRate']) 
+    newPattern = genetics.pointwiseMutate(oldPattern, geno['seed'], hyperGeno['mutateRate']) 
+    geno['seed'] = ecology.nextSeed(geno['seed'], "hillClimb.nextGenotypes, After pointwise mutation update the hillcClimb seed.")
     
     # We DO reuse the problem's debris between the old and new fitnesses, but not across generations of course:
     if hyperGeno['moment']==float("inf"):
