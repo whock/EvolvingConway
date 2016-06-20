@@ -20,9 +20,9 @@ import taskMgr
 import matplotlib
 import importlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg #, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
+import graph
 from tkinter import *
 from importlib import * # allows the user to call reload(...) to realod a module. 
 import traceback
@@ -32,7 +32,6 @@ import pickle
 import io
 import threading
 import math
-import itertools
 import pmap
 
 ##################### Program state #####################
@@ -52,9 +51,6 @@ commandsEnteredIndex = 0
 ##################### UI related variables and functions #####################
 root = Tk()
 emFig = Figure(figsize=(8, 5), dpi=100)
-#plt.show(emFig)
-#emFig.number = 1
-#plotter =None# emFig.add_subplot(111) # use this to plot stuff.
 
 c = FigureCanvasTkAgg(emFig, master=root)
 c.show()
@@ -75,56 +71,12 @@ def pr(*args): # like the original print, but to the outputbox using a queue.
         s = s+str(a)+' ' # OK maybe the O(n^2) str concat, but n (the # of args) should be small.
     #print('putting: ',s)
     printQ.put(s)
-    #print('size  : ',printQ.qsize())
-    #outputBox.insert(END, '\n')
-    #outputBox.insert(END, s)
-
-def multiImagePlot(imgs, titles): # can be called from any thread.
-    # TODO: put these into ecology?
-    n = len(imgs)
-    cmds = []
-    cmds.append({'clear': None})
-    cmds.append({'makeSubplot': n})
-    for i in range(n):
-        cmds.append({'subaxis': i})
-        cmds.append({'image': imgs[i]})
-        cmds.append({'title': titles[i]})
-    #print("Put to plotQ")
-    plotQ.put(cmds)
 
 def takeOneFromPlotQ(): # only called on the update thread:
-    subF = None
-    gridSpec = None
-    gridSpecSize = None
-    ax = None 
     if plotQ.empty():
-        return
-    #print("Get from plotQ")
-    #plt.figure()
-    cmds = plotQ.get()
-    for cmd in cmds:
-        name = list(cmd.keys())[0]
-        val = cmd[name]
-        #print("Running plot cmd:",name)
-        if name == 'clear':
-            plt.clf()
-        elif name == 'makeSubplot':
-            sizes = [[1,[1,1]], [2,[1,2]], [3,[1,3]], [4,[2,2]], [6,[2,3]], [9,[3,3]],
-                     [12, [3,4]], [16, [4,4]], [20, [4,5]], [25, [5,5]], [36, [6,6]]]
-            sz = [math.ceil(math.sqrt(val)), math.ceil(math.sqrt(val))]
-            ls = list(itertools.dropwhile(lambda s: s[0]<val, sizes))
-            if ls:
-               sz = ls[0]
-            gridSpecSize = [sz[1][0], sz[1][1]]
-            gridSpec = plt.GridSpec(gridSpecSize[0],gridSpecSize[1])
-        elif name == 'subaxis':
-            #print("axpos:",val % gridSpecSize[0] , math.floor(val/gridSpecSize[0] + 1e-12))
-            ax = emFig.add_subplot(gridSpec[val % gridSpecSize[0] , math.floor(val/gridSpecSize[0] + 1e-12)])
-        elif name == 'image':
-            ax.imshow(np.transpose(val))
-        elif name == 'title':
-            ax.set_title(val)
-    emFig.canvas.draw()
+        return # nothing to plot.
+    graph.actualize(emFig, plotQ.get())
+    
 
 def doGuiCmd(cmd): # work-around for other things not being able to import ourselves. 
     # can be called from any thread.
@@ -144,7 +96,6 @@ def testPause():
     pr("After 2 second")
     time.sleep(2)
     pr("And after 3 seconds (done)")
-
 
 #############################################################
 

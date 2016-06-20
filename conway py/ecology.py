@@ -15,13 +15,14 @@ import pmap
 from subprocess import call#, reload
 import copy
 from conway_sql import *
+import graph
 
 #import conwaygui
 
 import fill
 
 #call(["python3","setup.py","build_ext","--inplace"])
-print('WARNING: no attempt made to update the cython code. IF YOU WANT TO RELOAD: uncomment above line (line #20), run, then restart python to update.')
+print('WARNING: no attempt made to update the cython code. IF YOU WANT TO RELOAD: uncomment above line (line #23), run, then restart python to update.')
 
 # TODO: check to make sure python isn't less up-to-date.
 
@@ -51,7 +52,7 @@ sentinel = Sentinel()
 
 # makes a problem (that the climber has to solve):
 def makeProblem(**kwargs):
-    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 504, 'density': 0.02,
+    defaults = {'w': 120, 'h': 144, 'chunk':12, 'worldW': 648, 'density': 0.02,
                 'time': 10000, 'rng': RandomState(3210123)}
     return fill.fill(kwargs, defaults)
 
@@ -145,11 +146,13 @@ def mostRightward(pattern0, pattern1, w, h, worldW):
              maxInd = i
     return maxInd-w
 
-def singleTrial(pattern, problem):
+def singleTrialBeforeVsAfter(pattern, problem, metric):
+    """ Single trial before vs after.
+         Metric takes in (pattern0, pattern1, w, h, worldW) and calculates any scalar. """
     # Generates pattern, returns the fitness.
     pattern0 = addDebris(pattern, problem['w'], problem['h'], problem['worldW'], problem['density'], problem['rng'])
     pattern1 = conway(pattern0, problem['time'], problem['chunk'])
-    return mostRightward(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])
+    return metric(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])
 
 def getMultiTrialRngs(rng, n):
     # Make a stream of rngs (NOT using next, because they probably will use nnextRng) that are used
@@ -161,10 +164,12 @@ def getMultiTrialRngs(rng, n):
         rngs.append(r)
     return rngs
 
-def fitness(problem, pattern, n): # Runs n trials.
-    
+def vectorBeforeVsAfter(problem, pattern, metric, n):
+    """ Calculates a vector of values of metric for the problem and pattern, using 
+        a sequence of random number generators.
+        Metric takes in (pattern0, pattern1, w, h, worldW) and calculates any value.
+        Metric CANNOT be a lambda function due to limits to python """ 
     rngs = getMultiTrialRngs(problem['rng'], n) # one for each trial.
-
     # Put one rng into each problem:
     problems = list()
     for i in range(n):
@@ -173,12 +178,23 @@ def fitness(problem, pattern, n): # Runs n trials.
         problems.append(problem1)
     parallel = True
     if parallel: # multithread.
-        fitnesses = list(pmap.maplist(singleTrial, pmap.box(pattern), problems))
+        scores = list(pmap.maplist(singleTrialBeforeVsAfter, pmap.box(pattern), problems, pmap.box(metric)))
     else:
-        fitnesses = list(map(lambda p: singleTrial(pattern, p), problems))
-    return_this = functools.reduce(lambda x, y: x + y, fitnesses) / n
+        scores = list(map(lambda p: singleTrialBeforeVsAfter(pattern, p, metric), problems))
+    sentinel(('data',scores),('patterns',pattern),('problems',problem))
+    return scores    
+
+def averageBeforeVsAfter(problem, pattern, metric, n):
+    """ Calculates the average of metric for the problem and pattern.
+        Metric takes in (pattern0, pattern1, w, h, worldW) and calculates any scalar.
+        Metric CANNOT be a lambda function due to limits to python """
+    scores = vectorBeforeVsAfter(problem, pattern, metric, n)
+    return_this = functools.reduce(lambda x, y: x + y, scores) / n
     sentinel(('data',return_this),('patterns',pattern),('problems',problem))
     return return_this
+    
+def fitness(problem, pattern, n): # Runs n trials.
+    return averageBeforeVsAfter(problem, pattern, mostRightward, n)
 
 def showPattern(pattern): # shows a pattern (only works for a figure).
     plt.imshow(pattern)
@@ -208,7 +224,7 @@ def viewTrial(problem, pattern, n, mode): # graphical tool to see what is going 
         sc = mostRightward(pattern0, pattern1, problem['w'], problem['h'], problem['worldW'])  
         titles.append('Trial # '+str(i)+' fitness: '+str(sc))
     
-    return {'multiImagePlot': [imgs, titles]} # can't import conway directly, it crashes.
+    return graph.multiImagePlot(imgs, titles) # can't import conway directly, it crashes.
 
 
 def run(problem, hyperGeno, genos, nextGenosFn, nStep):
