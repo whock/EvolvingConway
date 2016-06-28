@@ -42,9 +42,17 @@ def testRandomPatternStatistics():
     x.append('result = testBed.randomPatternStatistics()')
     return x
 
+def testRugged():
+    x = []
+    x.append('import testBed')
+    x.append('import graph')
+    x.append('result = testBed.landscapeRuggedness()')
+    return x
+
 def cmds():
     #x = testMakePatterns()
     #x = testHillClimb0()
     #x = testHillClimbOvernight()
-    x = testRandomPatternStatistics()
+    #x = testRandomPatternStatistics()
+    x = testRugged()
     return x
